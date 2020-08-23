@@ -1,6 +1,7 @@
 import Phaser, { Scene, Game } from 'phaser';
 import AlignGrid from '../classes/utils/AlignGrid';
 import TiledBackground from '../classes/comps/TiledBackground';
+
 import dirtImage from '../../public/images/main/dirt.png';
 import tank1Image from '../../public/images/main/tank1.png';
 import tank2Image from '../../public/images/main/tank2.png';
@@ -12,9 +13,16 @@ import Align from '../classes/utils/Align';
 
 export default class SceneMain extends Phaser.Scene{
 
-    tank1:any;
-    tank2:any;
+    tank1:Phaser.GameObjects.Sprite;
+    tank2:Phaser.GameObjects.Sprite;
     alignGrid: AlignGrid;
+    canFire: boolean;
+    messages:[];
+    messageText: Phaser.GameObjects.Text;
+    messageTimer: any;
+    shootTimer: any;
+    firedFlag: boolean;
+    
 
     constructor(){
         super('SceneMain');
@@ -27,9 +35,11 @@ export default class SceneMain extends Phaser.Scene{
             this.load.image( 'smoke', smokeImage);
             this.load.image('bullet1', bulletImage1);
             this.load.image('bullet2', bulletImage2);
+            
+
     }
     create(){
-        console.log("Ready!")
+        this.firedFlag = false;
         let background = new TiledBackground({
             scene: this,
             key: 'dirt'
@@ -45,6 +55,20 @@ export default class SceneMain extends Phaser.Scene{
         this.alignGrid.placeAtIndex(2,this.tank2);
         
         this.input.on('pointerdown',this.clicked, this);
+
+        this.canFire = false;
+        this.messages=[];
+        this.setUpMessages();
+
+        this.messageText = this.add.text(0,0, "Message");
+        this.messageText.setOrigin(0.5,0.5);
+        Align.center(this.messageText, this);
+        this.messageTimer = this.time.addEvent({
+            delay:1000,
+            callback: this.setNextMessage,
+            callbackScope: this,
+            loop:true
+        })
         
     }
 
@@ -64,7 +88,15 @@ export default class SceneMain extends Phaser.Scene{
 
     clicked(){
         console.log('clicked!');
-       this.showBullet(this.tank1, this.tank2);
+
+        if(this.canFire){
+            this.showBullet(this.tank1, this.tank2);
+            this.canFire = false;
+        } else{
+            this.setLoseMessage("Fired too early!");
+            this.showBullet(this.tank2, this.tank1);
+        }
+       
     }
 
     tankHit(tank: any){
@@ -82,16 +114,20 @@ export default class SceneMain extends Phaser.Scene{
         })
     }
 
-    showSmoke(tank: any){
+    showSmoke(tank: Phaser.GameObjects.Sprite){
         let smoke = this.add.image(0,0,'smoke');
         Align.scaleToGameWidth(smoke, 0.2, this);
         let targetY: number| string = 0;
-
-        if(tank.y == this.tank2){
+        let tankPosY = Number(tank.y);
+        let screenCenter = Number(this.game.config.height) /2;
+        
+        if(tank .y< screenCenter){
+            
             this.alignGrid.placeAtIndex(7,smoke);
             targetY = this.game.config.height;
         } else{
             this.alignGrid.placeAtIndex(17,smoke);
+        }
             this.tweens.add({
                 targets: smoke, 
                 duration:1500,
@@ -100,7 +136,7 @@ export default class SceneMain extends Phaser.Scene{
                 scaleY:0,
                 alpha:0
             })
-        }
+        
     }
 
     showBullet(firedTank:any, hitTank: any){
@@ -111,7 +147,14 @@ export default class SceneMain extends Phaser.Scene{
         let angle:number|string;
         let scope: any;
 
+        if(this.firedFlag){
+            return;
+        }
+        this.firedFlag = true;
+        
         this.showSmoke(firedTank);
+        console.log(firedTank==this.tank1);
+        console.log(firedTank==this.tank2);
         let tankY = hitTank.y;
 
         if(firedTank == this.tank2){
@@ -124,7 +167,7 @@ export default class SceneMain extends Phaser.Scene{
              angle = 0;
         }
 
-        let bullet = this.add.image(firedTank.x, startY, bulletKey);
+        bullet = this.add.image(firedTank.x, startY, bulletKey);
         bullet.angle = angle;
         Align.scaleToGameWidth(bullet, 0.06, this);
 
@@ -143,10 +186,66 @@ export default class SceneMain extends Phaser.Scene{
       targets[0].destroy();
     }
 
-  
+  setUpMessages(){
+      this.messages.push({
+          text: "Ready",
+        style:{
+            fontFamily: 'Share Tech Mono',
+            fontSize: '46px',
+            color: '#000000'
+        }});
+      this.messages.push({
+        text: "Steady",
+      style:{
+          fontFamily: 'Share Tech Mono',
+          fontSize: '46px',
+          color: '#000000'
+      }});
+      this.messages.push({
+        text: "Fire!",
+      style:{
+          fontFamily: 'Share Tech Mono',
+          fontSize: '46px',
+          color: '#000000'
+      }});
+  }
+
+  setNextMessage():void{
+      
+      let message: {text: string, style:{}};
+      let delay: number;
+      message = this.messages.shift();
+      
+      this.messageText.setText(message.text);
+      this.messageText.setStyle(message.style);
+      if(this.messages.length===0){
+          this.canFire = true;
+          this.messageTimer.remove(false);
+          delay = 500 + Math.random()*100;
+          this.shootTimer = this.time.addEvent({
+              delay: delay,
+              callback: this.computerShoot,
+              callbackScope: this,
+              loop: false
+          });
+      }
+      this.messageText.setText(message.text);
+  }
+
+  setLoseMessage(reason: string): void{
+      this.messageText.setText(reason);
+      this.messageText.setStyle({
+            fontFamily: 'Share Tech Mono',
+            fontSize: '46px',
+            color: '#ff0000'
+        })
+  }
+
+  computerShoot():void{
+      this.setLoseMessage("Waited too long!")
+    this.showBullet(this.tank2, this.tank1);
+  }
 
    
-
-
     update(){}
 }
